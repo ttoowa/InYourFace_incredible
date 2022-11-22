@@ -18,6 +18,7 @@ async function main() {
 		console.error('Failed to run tests');
 		process.exit(1);
 	}
+	process.exit(0);
 }
 
 main();
