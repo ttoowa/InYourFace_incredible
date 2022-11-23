@@ -4,6 +4,8 @@
 
 You can see faces that change with the number of source code errors.
 
+You can disable sound in the configuration (`Uncanny: Sound`).
+
 ## Usage
 
 ![IncredibleMemeExtension](https://user-images.githubusercontent.com/19409574/171599694-df893a24-809c-46f1-a5db-c40531b5d30b.gif)

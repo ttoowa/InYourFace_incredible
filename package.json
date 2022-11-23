@@ -61,7 +61,19 @@
 		  "title": "Open Sidebar",
 		  "icon": "$(clear-all)"
 		}
-	  ]
+	  ],
+		"configuration": [
+			{
+				"title": "Uncanny",
+				"properties": {
+					"uncanny.sound": {
+						"type": "boolean",
+						"description": "Whether the sounds should be played",
+						"default": true
+					}
+				}
+			}
+		]
 	},
 	"scripts": {
 	  "vscode:prepublish": "npm run compile",
