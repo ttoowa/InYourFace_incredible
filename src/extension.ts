@@ -13,225 +13,72 @@ import * as vscode from "vscode";
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-    console.log("Extension activated");
+  const provider = new CustomSidebarViewProvider(context.extensionUri);
 
-    const provider = new CustomSidebarViewProvider(context.extensionUri);
-
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider(CustomSidebarViewProvider.viewType, provider));
-
-    let _statusBarItem: vscode.StatusBarItem;
-    let errorLensEnabled: boolean = true;
-
-    // Use the console to output diagnostic information (console.log) and errors (console.error)
-    // console.log('Visual Studio Code Extension "errorlens" is now active');
-
-    // Commands are defined in the package.json file
-    let disposableEnableErrorLens = vscode.commands.registerCommand("ErrorLens.enable", () => {
-        errorLensEnabled = true;
-
-        const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
-        if (activeTextEditor) {
-            updateDecorationsForUri(activeTextEditor.document.uri);
-        }
-    });
-
-    context.subscriptions.push(disposableEnableErrorLens);
-
-    let disposableDisableErrorLens = vscode.commands.registerCommand("ErrorLens.disable", () => {
-        errorLensEnabled = false;
-
-        const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
-        if (activeTextEditor) {
-            updateDecorationsForUri(activeTextEditor.document.uri);
-        }
-    });
-
-    context.subscriptions.push(disposableDisableErrorLens);
-
-    vscode.languages.onDidChangeDiagnostics(
-        (diagnosticChangeEvent) => {
-            onChangedDiagnostics(diagnosticChangeEvent);
-        },
-        null,
-        context.subscriptions
-    );
-
-    // Note: URIs for onDidOpenTextDocument() can contain schemes other than file:// (such as git://)
-    vscode.workspace.onDidOpenTextDocument(
-        (textDocument) => {
-            updateDecorationsForUri(textDocument.uri);
-        },
-        null,
-        context.subscriptions
-    );
-
-    // Update on editor switch.
-    vscode.window.onDidChangeActiveTextEditor(
-        (textEditor) => {
-            if (textEditor === undefined) {
-                return;
-            }
-            updateDecorationsForUri(textEditor.document.uri);
-        },
-        null,
-        context.subscriptions
-    );
-
-    function onChangedDiagnostics(diagnosticChangeEvent: vscode.DiagnosticChangeEvent) {
-        if (!vscode.window) {
-            return;
-        }
-
-        const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
-        if (!activeTextEditor) {
-            return;
-        }
-
-        // Many URIs can change - we only need to decorate the active text editor
-        for (const uri of diagnosticChangeEvent.uris) {
-            // Only update decorations for the active text editor.
-            if (uri.fsPath === activeTextEditor.document.uri.fsPath) {
-                updateDecorationsForUri(uri);
-                break;
-            }
-        }
-    }
-
-    function updateDecorationsForUri(uriToDecorate: vscode.Uri) {
-        if (!uriToDecorate) {
-            return;
-        }
-
-        // Only process "file://" URIs.
-        if (uriToDecorate.scheme !== "file") {
-            return;
-        }
-
-        if (!vscode.window) {
-            return;
-        }
-
-        const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
-        if (!activeTextEditor) {
-            return;
-        }
-
-        if (!activeTextEditor.document.uri.fsPath) {
-            return;
-        }
-
-        let numErrors = 0;
-        let numWarnings = 0;
-
-        if (errorLensEnabled) {
-            let aggregatedDiagnostics: any = {};
-            let diagnostic: vscode.Diagnostic;
-
-            // Iterate over each diagnostic that VS Code has reported for this file. For each one, add to
-            // a list of objects, grouping together diagnostics which occur on a single line.
-            for (diagnostic of vscode.languages.getDiagnostics(uriToDecorate)) {
-                let key = "line" + diagnostic.range.start.line;
-
-                if (aggregatedDiagnostics[key]) {
-                    // Already added an object for this key, so augment the arrayDiagnostics[] array.
-                    aggregatedDiagnostics[key].arrayDiagnostics.push(diagnostic);
-                } else {
-                    // Create a new object for this key, specifying the line: and a arrayDiagnostics[] array
-                    aggregatedDiagnostics[key] = {
-                        line: diagnostic.range.start.line,
-                        arrayDiagnostics: [diagnostic],
-                    };
-                }
-
-                switch (diagnostic.severity) {
-                    case 0:
-                        numErrors += 1;
-                        break;
-
-                    case 1:
-                        numWarnings += 1;
-                        break;
-
-                    // Ignore other severities.
-                }
-            }
-        }
-    }
+  context.subscriptions.push(vscode.languages.onDidChangeDiagnostics(() => provider.changed()));
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(CustomSidebarViewProvider.viewType, provider));
 }
+
+const FACES = [
+  {minErrors: 0, asset: "1.webp", sound: "mr-incredible-uncanny-1.mp3"},
+  {minErrors: 1, asset: "2.webp", sound: "mr-incredible-uncanny-2.mp3"},
+  {minErrors: 5, asset: "3.webp", sound: "mr-incredible-uncanny-3.mp3"},
+  {minErrors: 10, asset: "4.webp", sound: "mr-incredible-uncanny-4.mp3"},
+  {minErrors: 15, asset: "5.webp", sound: "mr-incredible-uncanny-5.mp3"},
+  {minErrors: 20, asset: "6.webp", sound: "mr-incredible-uncanny-6.mp3"},
+  {minErrors: 25, asset: "7.png"/* don't ask */, sound: "mr-incredible-uncanny-7.mp3"},
+  {minErrors: 30, asset: "8.webp", sound: "mr-incredible-uncanny-8.mp3"},
+  {minErrors: 35, asset: "9.webp", sound: "mr-incredible-uncanny-9.mp3"},
+  {minErrors: 40, asset: "10.webp", sound: "mr-incredible-uncanny-10.mp3"},
+].reverse();
+
+type Face = (typeof FACES)[0];
 
 class CustomSidebarViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = "in-your-face.openview";
+  public static readonly viewType = "in-your-face.openview";
 
-    private _view?: vscode.WebviewView;
+  view?: vscode.WebviewView;
+  face: Face = FACES[0];
 
-    constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(private readonly _extensionUri: vscode.Uri) { }
 
-    resolveWebviewView(webviewView: vscode.WebviewView, context: vscode.WebviewViewResolveContext<unknown>, token: vscode.CancellationToken): void | Thenable<void> {
-        this._view = webviewView;
+  changed() {
+    const errorCount = getNumErrors();
+    if (!this.view) { return; }
+    const face = FACES.find(face => errorCount >= face.minErrors)!;
 
-        webviewView.webview.options = {
-            // Allow scripts in the webview
-            enableScripts: true,
-            localResourceRoots: [this._extensionUri],
-        };
+    this.view.webview.html = this.getHtmlContent(this.view.webview, face, this.face);
+    this.face = face;
+  }
 
-        // default webview will show doom face 0
-        webviewView.webview.html = this.getHtmlContent0(webviewView.webview);
+  resolveWebviewView(webviewView: vscode.WebviewView): void | Thenable<void> {
+    this.view = webviewView;
+    //ensurs assets can load
+    webviewView.webview.options = {
+      enableScripts: true //for audio
+    };
+    this.changed();
+  }
 
-        // This is called every second is decides which doom face to show in the webview
-        setInterval(() => {
-            let errors = getNumErrors();
-            if (errors === 0) {
-                webviewView.webview.html = this.getHtmlContent0(webviewView.webview);
-            } else if (errors < 5) {
-                webviewView.webview.html = this.getHtmlContent1(webviewView.webview);
-            } else if (errors < 10) {
-                webviewView.webview.html = this.getHtmlContent2(webviewView.webview);
-            } else {
-                webviewView.webview.html = this.getHtmlContent3(webviewView.webview);
-            }
-        }, 1000);
-    }
 
-    // This is doom face 0
-    private getHtmlContent0(webview: vscode.Webview): string {
-        const stylesheetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "main.css"));
+  private getHtmlContent(webview: vscode.Webview, face: Face, previousFace: Face): string {
+    const face0 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "images", face.asset));
+    const sound0 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "sounds", face.sound));
 
-        const face0 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "incredible0.png"));
+    const faceChanged = face.minErrors !== previousFace.minErrors;
+    const playSound = faceChanged && vscode.workspace.getConfiguration().get<boolean>("uncanny.sound");
 
-        return getHtml(face0);
-    }
-
-    // This is doom face 1
-    private getHtmlContent1(webview: vscode.Webview): string {
-        const stylesheetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "main.css"));
-
-        const face1 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "incredible1.png"));
-
-        return getHtml(face1);
-    }
-
-    // This is doom face 2
-    private getHtmlContent2(webview: vscode.Webview): string {
-        const stylesheetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "main.css"));
-
-        const face2 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "incredible2.png"));
-
-        return getHtml(face2);
-    }
-
-    // This is doom face 3
-    private getHtmlContent3(webview: vscode.Webview): string {
-        const stylesheetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "main.css"));
-
-        const face3 = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, "assets", "incredible3.png"));
-
-        return getHtml(face3);
-    }
+    return getHtml(face0, playSound ? sound0 : undefined);
+  }
 }
 
-function getHtml(doomFace: any) {
-    return `
+function getHtml(asset: vscode.Uri, sound?: vscode.Uri) {
+  const maybeAudio = sound?
+  `<audio autoplay>
+    <source src="${sound}" type="audio/mpeg">
+  </audio>` : "";
+
+  return `
     <!DOCTYPE html>
 			<html lang="en">
 			<head>
@@ -240,8 +87,9 @@ function getHtml(doomFace: any) {
 
 			<body>
 			<section class="wrapper">
-      <img class="doomFaces" src="${doomFace}" alt="" >
-      <h1 id="errorNum">${getNumErrors() + " errors"}</h1>
+      <img class="doomFaces" src="${asset}" alt="" >
+      ${maybeAudio}
+      <h1 id="errorNum">${getNumErrors() + " error(s)"}</h1>
 			</section>
       <script>
 
@@ -254,49 +102,16 @@ function getHtml(doomFace: any) {
 
 // function to get the number of errors in the open file
 function getNumErrors(): number {
-    const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
-    if (!activeTextEditor) {
-        return 0;
-    }
-    const document: vscode.TextDocument = activeTextEditor.document;
+  const activeTextEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
+  if (!activeTextEditor) {
+    return 0;
+  }
+  const document: vscode.TextDocument = activeTextEditor.document;
 
-    let numErrors = 0;
-    let numWarnings = 0;
+  const numErrors =
+    vscode.languages
+      .getDiagnostics(document.uri)
+      .filter(d => d.severity === vscode.DiagnosticSeverity.Error).length;
 
-    let aggregatedDiagnostics: any = {};
-    let diagnostic: vscode.Diagnostic;
-
-    // Iterate over each diagnostic that VS Code has reported for this file. For each one, add to
-    // a list of objects, grouping together diagnostics which occur on a single line.
-    for (diagnostic of vscode.languages.getDiagnostics(document.uri)) {
-        let key = "line" + diagnostic.range.start.line;
-
-        if (aggregatedDiagnostics[key]) {
-            // Already added an object for this key, so augment the arrayDiagnostics[] array.
-            aggregatedDiagnostics[key].arrayDiagnostics.push(diagnostic);
-        } else {
-            // Create a new object for this key, specifying the line: and a arrayDiagnostics[] array
-            aggregatedDiagnostics[key] = {
-                line: diagnostic.range.start.line,
-                arrayDiagnostics: [diagnostic],
-            };
-        }
-
-        switch (diagnostic.severity) {
-            case 0:
-                numErrors += 1;
-                break;
-
-            case 1:
-                numWarnings += 1;
-                break;
-
-            // Ignore other severities.
-        }
-    }
-
-    return numErrors;
+  return numErrors;
 }
-
-// this method is called when your extension is deactivated
-export function deactivate() {}
