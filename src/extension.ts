@@ -30,6 +30,8 @@ const FACES = [
   {minErrors: 30, asset: "8.webp", sound: "mr-incredible-uncanny-8.mp3"},
   {minErrors: 35, asset: "9.webp", sound: "mr-incredible-uncanny-9.mp3"},
   {minErrors: 40, asset: "10.webp", sound: "mr-incredible-uncanny-10.mp3"},
+  {minErrors: 45, asset: "11.png", sound: "mr-incredible-uncanny-10.mp3"},
+
 ].reverse();
 
 type Face = (typeof FACES)[0];
